@@ -1,0 +1,1415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkateCraft</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, -apple-system, sans-serif; user-select: none; }
+  canvas { display: block; }
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: difference; }
+  #crosshair:before, #crosshair:after { content: ""; position: absolute; background: #fff; }
+  #crosshair:before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #crosshair:after { left: 0; top: 9px; width: 20px; height: 2px; }
+  #hotbar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; background: rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.25); border-radius: 4px; }
+  .slot { width: 44px; height: 44px; border: 2px solid rgba(255,255,255,.18); position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+  .slot.sel { border-color: #fff; outline: 2px solid #000; }
+  .slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+  .slot span { position: absolute; top: 0; left: 3px; font-size: 10px; color: #ddd; text-shadow: 1px 1px 0 #000; }
+  .hud { position: fixed; color: #fff; text-shadow: 2px 2px 0 rgba(0,0,0,.7); pointer-events: none; }
+  #info { top: 8px; left: 8px; font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre; text-shadow: 1px 1px 0 #000; }
+  #score { top: 10px; right: 14px; text-align: right; font-weight: 800; font-size: 22px; font-style: italic; }
+  #score small { display: block; font-size: 13px; font-weight: 600; opacity: .85; }
+  #combo { top: 54px; left: 50%; transform: translateX(-50%); text-align: center; font-weight: 800; font-style: italic; font-size: 20px; white-space: nowrap; }
+  #combo .pts { font-size: 26px; color: #ffd23f; }
+  #popup { top: 34%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; font-weight: 900; font-style: italic; text-align: center; opacity: 0; transition: opacity .35s; }
+  #popup small { display: block; font-size: 16px; font-weight: 600; }
+  #meter { bottom: 120px; left: 50%; transform: translateX(-50%); width: 220px; height: 14px; border: 2px solid #fff; border-radius: 8px; background: linear-gradient(90deg, #e33 0%, #fc3 25%, #3c3 42%, #3c3 58%, #fc3 75%, #e33 100%); display: none; }
+  #needle { position: absolute; top: -6px; width: 4px; height: 22px; background: #fff; box-shadow: 0 0 0 1px #000; left: 50%; margin-left: -2px; }
+  #meter span { position: absolute; top: -20px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+  #hint { bottom: 70px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: .85; white-space: nowrap; }
+  #blockname { bottom: 96px; left: 50%; transform: translateX(-50%); font-size: 15px; opacity: 0; transition: opacity .5s; }
+  #water { position: fixed; inset: 0; background: rgba(25,55,170,.38); pointer-events: none; display: none; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.62); display: flex; align-items: center; justify-content: center; color: #fff; z-index: 10; overflow: auto; }
+  #panel { text-align: center; max-width: 560px; padding: 20px; }
+  h1 { font-size: 50px; margin: 0 0 4px; letter-spacing: 3px; font-style: italic; text-shadow: 4px 4px 0 #c0392b; }
+  #panel p { margin: 0 0 12px; color: #ccc; }
+  button { font: inherit; font-size: 16px; padding: 10px 26px; margin: 6px; background: #6f6f6f; color: #fff; border: 2px solid #000; box-shadow: inset 2px 2px 0 #a0a0a0, inset -2px -2px 0 #444; cursor: pointer; }
+  button:hover { background: #7d88bf; }
+  .cols { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; }
+  table { margin: 10px 0 4px; font-size: 13px; border-collapse: collapse; text-align: left; }
+  th { color: #fff; font-size: 13px; text-align: left; padding: 4px 8px; border-bottom: 1px solid #555; }
+  td { padding: 2px 8px; }
+  td:first-child { color: #ffd76a; text-align: right; font-weight: 600; white-space: nowrap; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<div id="crosshair"></div>
+<div id="water"></div>
+<div id="info" class="hud"></div>
+<div id="score" class="hud"></div>
+<div id="combo" class="hud"></div>
+<div id="popup" class="hud"></div>
+<div id="meter" class="hud"><span>BALANCE</span><div id="needle"></div></div>
+<div id="hint" class="hud"></div>
+<div id="blockname" class="hud"></div>
+<div id="hotbar"></div>
+<div id="overlay">
+  <div id="panel">
+    <h1>SKATECRAFT</h1>
+    <p>Skate a blocky world. Flick tricks, grind every ledge, build your own park.</p>
+    <button id="play">Play</button>
+    <button id="newworld">New World</button>
+    <div class="cols">
+      <table>
+        <tr><th></th><th>On the board</th></tr>
+        <tr><td>W</td><td>Push</td></tr>
+        <tr><td>S</td><td>Brake</td></tr>
+        <tr><td>A / D</td><td>Carve · spin in air · balance</td></tr>
+        <tr><td>Space</td><td>Hold to crouch, release to ollie</td></tr>
+        <tr><td>Flick mouse ↑</td><td>Ollie</td></tr>
+        <tr><td>Flick ↖ / ↗</td><td>Kickflip / Heelflip</td></tr>
+        <tr><td>Flick ↙ / ↘</td><td>Pop shove-it</td></tr>
+        <tr><td>Z / X / C</td><td>Kickflip / Heelflip / Shove-it</td></tr>
+        <tr><td>Shift</td><td>Manual (W/S to balance)</td></tr>
+        <tr><td>Land on a rail/ledge</td><td>Grind</td></tr>
+        <tr><td>E</td><td>Step off the board</td></tr>
+      </table>
+      <table>
+        <tr><th></th><th>On foot</th></tr>
+        <tr><td>WASD + Mouse</td><td>Walk and look</td></tr>
+        <tr><td>Space / Shift</td><td>Jump / sprint</td></tr>
+        <tr><td>F</td><td>Toggle flying</td></tr>
+        <tr><td>Left click</td><td>Break block</td></tr>
+        <tr><td>Right click</td><td>Place block</td></tr>
+        <tr><td>Middle click</td><td>Pick block</td></tr>
+        <tr><td>1–9 / Wheel</td><td>Select block</td></tr>
+        <tr><td>E</td><td>Hop on the board</td></tr>
+        <tr><td>Esc</td><td>Pause</td></tr>
+      </table>
+    </div>
+    <p style="font-size:12px;margin-top:8px">Ramps face away from you when placed. Chain tricks into combos; land cleanly to bank them. Saves automatically.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ---------- Constants ----------
+const CS = 16, H = 64, WATER = 22, RENDER = 6, PS = 48;
+const B = { AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6, WATER: 7, PLANKS: 8, COBBLE: 9, GLASS: 10, BRICK: 11, SNOW: 12, BEDROCK: 13,
+  CONCRETE: 14, RAMP: 15 /* 15-18 */, QP: 19 /* 19-22 */, RAIL_X: 23, RAIL_Z: 24 };
+const NAMES = ['Air', 'Grass Block', 'Dirt', 'Stone', 'Sand', 'Oak Log', 'Leaves', 'Water', 'Oak Planks', 'Cobblestone', 'Glass', 'Bricks', 'Snow', 'Bedrock',
+  'Concrete', 'Ramp', 'Ramp', 'Ramp', 'Ramp', 'Quarter Pipe', 'Quarter Pipe', 'Quarter Pipe', 'Quarter Pipe', 'Rail', 'Rail'];
+// [side, top, bottom] atlas tile indices
+const TILES = [null, [1, 0, 2], [2, 2, 2], [3, 3, 3], [4, 4, 4], [5, 6, 6], [7, 7, 7], [8, 8, 8], [9, 9, 9], [10, 10, 10], [11, 11, 11], [12, 12, 12], [15, 13, 2], [14, 14, 14],
+  [16, 16, 16], ...Array(8).fill([16, 18, 16]), [17, 17, 17], [17, 17, 17]];
+const isSlope = id => id >= 15 && id <= 22;
+const isQP = id => id >= 19 && id <= 22;
+const isRail = id => id === 23 || id === 24;
+const isOpaque = id => id !== 0 && id !== B.LEAVES && id !== B.WATER && id !== B.GLASS && !isSlope(id) && !isRail(id);
+const isSolid = id => id !== 0 && id !== B.WATER && !isRail(id);
+const isFullSolid = id => isSolid(id) && !isSlope(id);
+const hotbar = [B.CONCRETE, B.RAMP, B.QP, B.RAIL_X, B.PLANKS, B.STONE, B.GRASS, B.GLASS, B.BRICK];
+let sel = 0;
+
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- Procedural texture atlas (8x4 tiles of 16px) ----------
+const AW = 8, AH = 4;
+const atlas = document.createElement('canvas');
+atlas.width = AW * 16; atlas.height = AH * 16;
+const actx = atlas.getContext('2d');
+function paintTile(i, fn) {
+  const img = actx.createImageData(16, 16), r = rng(i * 977 + 13);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const c = fn(x, y, r), o = (y * 16 + x) * 4;
+    img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = c[3] === undefined ? 255 : c[3];
+  }
+  actx.putImageData(img, (i % AW) * 16, Math.floor(i / AW) * 16);
+}
+const vary = (c, r, a) => { const k = 1 + (r() - .5) * a; return [c[0] * k, c[1] * k, c[2] * k]; };
+const grassC = r => vary([96, 160, 56], r, .3);
+const dirtC = r => r() < .1 ? vary([100, 70, 48], r, .2) : vary([134, 96, 67], r, .25);
+const snowC = r => vary([238, 246, 250], r, .06);
+const gd = Array.from({ length: 16 }, (_, i) => 3 + Math.floor(rng(50 + i)() * 3));
+const cr = rng(99), cpts = Array.from({ length: 11 }, () => [cr() * 16, cr() * 16]);
+
+paintTile(0, (x, y, r) => grassC(r));
+paintTile(1, (x, y, r) => y < gd[x] ? grassC(r) : dirtC(r));
+paintTile(2, (x, y, r) => dirtC(r));
+paintTile(3, (x, y, r) => r() < .08 ? vary([98, 98, 98], r, .1) : vary([128, 128, 128], r, .22));
+paintTile(4, (x, y, r) => vary([220, 208, 160], r, .12));
+paintTile(5, (x, y, r) => { const s = x % 4 === 0 ? .72 : 1; return vary([104 * s, 80 * s, 50 * s], r, .2); });
+paintTile(6, (x, y, r) => {
+  const dx = x - 7.5, dy = y - 7.5;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) > 6.5) return vary([104, 80, 50], r, .2);
+  return vary(Math.floor(Math.hypot(dx, dy)) % 2 ? [170, 138, 86] : [150, 118, 70], r, .1);
+});
+paintTile(7, (x, y, r) => r() < .22 ? [0, 0, 0, 0] : vary([58, 128, 38], r, .45));
+paintTile(8, (x, y, r) => vary([48, 92, 210], r, .16));
+paintTile(9, (x, y, r) => {
+  if (y % 4 === 3) return [112, 86, 52];
+  if (x === (Math.floor(y / 4) % 2 ? 4 : 12)) return [122, 94, 58];
+  return vary([168, 135, 82], r, .12);
+});
+paintTile(10, (x, y, r) => {
+  let d1 = 99, d2 = 99, ni = 0;
+  cpts.forEach((p, i) => {
+    let dx = Math.abs(x - p[0]), dy = Math.abs(y - p[1]);
+    dx = Math.min(dx, 16 - dx); dy = Math.min(dy, 16 - dy);
+    const d = Math.hypot(dx, dy);
+    if (d < d1) { d2 = d1; d1 = d; ni = i; } else if (d < d2) d2 = d;
+  });
+  if (d2 - d1 < 1.1) return vary([72, 72, 72], r, .15);
+  const g = 105 + (ni * 13) % 45;
+  return vary([g, g, g], r, .15);
+});
+paintTile(11, (x, y) => {
+  if (x === 0 || y === 0 || x === 15 || y === 15) return [215, 235, 250, 255];
+  if ((x - y === 5 || x - y === 6) && x > 3 && x < 12) return [255, 255, 255, 255];
+  return [0, 0, 0, 0];
+});
+paintTile(12, (x, y, r) => {
+  const off = Math.floor(y / 4) % 2 ? 4 : 0;
+  if (y % 4 === 3 || (x + off) % 8 === 7) return vary([175, 170, 160], r, .1);
+  return vary([152, 70, 54], r, .2);
+});
+paintTile(13, (x, y, r) => snowC(r));
+paintTile(14, (x, y, r) => vary([80, 80, 80], r, .9));
+paintTile(15, (x, y, r) => y < gd[15 - x] ? snowC(r) : dirtC(r));
+paintTile(16, (x, y, r) => (x === 0 || y === 0) ? vary([150, 150, 146], r, .05) : r() < .05 ? vary([150, 150, 148], r, .1) : vary([182, 182, 176], r, .06));
+paintTile(17, (x, y) => { const g = 120 + (y < 8 ? y : 15 - y) * 14; return [g, g, g + 12]; });
+paintTile(18, (x, y, r) => vary([104, 116, 134], r, .06));
+
+const tex = new THREE.CanvasTexture(atlas);
+tex.magFilter = THREE.NearestFilter;
+tex.minFilter = THREE.NearestFilter;
+tex.generateMipmaps = false;
+const matSolid = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.5 });
+const matSpecial = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide });
+const matWater = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide });
+
+// ---------- Slope shapes (ramps rise linearly, quarter pipes curve up to near-vertical) ----------
+const QK = 0.995, QH = 1 - Math.sqrt(1 - QK * QK);
+const qp = t => (1 - Math.sqrt(1 - (QK * t) ** 2)) / QH;
+const qpd = t => QK * QK * t / Math.sqrt(1 - (QK * t) ** 2) / QH;
+const RDIR = [[1, 0], [0, 1], [-1, 0], [0, -1]]; // rising direction per orientation
+function slopeInfo(id, fx, fz) {
+  const o = (id - 15) % 4, q = isQP(id);
+  let t = o === 0 ? fx : o === 1 ? fz : o === 2 ? 1 - fx : 1 - fz;
+  t = Math.min(Math.max(t, 0), 1);
+  const d = q ? qpd(t) : 1;
+  return { h: q ? qp(t) : t, gx: RDIR[o][0] * d, gz: RDIR[o][1] * d };
+}
+
+// ---------- Noise ----------
+function makeNoise(seed) {
+  const r = rng(seed), p = new Uint8Array(512), perm = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+  const G = [[1, 1], [-1, 1], [1, -1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]];
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10), lerp = (a, b, t) => a + (b - a) * t;
+  const g = (h, x, y) => { const v = G[h & 7]; return v[0] * x + v[1] * y; };
+  return (x, y) => {
+    const X = Math.floor(x), Y = Math.floor(y), xf = x - X, yf = y - Y, xi = X & 255, yi = Y & 255;
+    const u = fade(xf), v = fade(yf);
+    const aa = p[p[xi] + yi], ab = p[p[xi] + yi + 1], ba = p[p[xi + 1] + yi], bb = p[p[xi + 1] + yi + 1];
+    return lerp(lerp(g(aa, xf, yf), g(ba, xf - 1, yf), u), lerp(g(ab, xf, yf - 1), g(bb, xf - 1, yf - 1), u), v);
+  };
+}
+
+// ---------- World state & saving ----------
+const SAVE_KEY = 'skatecraft-save-v1';
+let seed, noise, noise2, edits = {}, savedPlayer = null, totalScore = 0, bestCombo = 0, park = null;
+const chunks = new Map();
+const key = (cx, cz) => cx + ',' + cz;
+
+try {
+  const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+  if (s && typeof s.seed === 'number') {
+    seed = s.seed; edits = s.edits || {}; savedPlayer = s.player || null;
+    totalScore = s.score || 0; bestCombo = s.best || 0;
+  }
+} catch (e) {}
+if (seed === undefined) seed = Math.floor(Math.random() * 1e9);
+function initNoise() { noise = makeNoise(seed); noise2 = makeNoise(seed + 7919); }
+
+function saveNow() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      seed, edits, score: totalScore, best: bestCombo,
+      player: { x: player.pos.x, y: player.pos.y, z: player.pos.z, yaw: skating ? sk.heading : player.yaw, pitch: player.pitch, fly: player.fly, sel, hotbar, skating },
+    }));
+  } catch (e) {}
+}
+let saveTimer = 0;
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); }
+
+function hash(x, z) {
+  let h = (Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(seed, 1442695041)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function heightAt(x, z) {
+  let n = 0, amp = 1, f = 1 / 110, tot = 0;
+  for (let o = 0; o < 4; o++) { n += noise(x * f, z * f) * amp; tot += amp; amp *= .5; f *= 2; }
+  n /= tot;
+  const m = Math.max(0, noise2(x / 260, z / 260));
+  return Math.max(3, Math.min(H - 10, Math.floor(WATER + 2 + n * 18 + m * m * 80)));
+}
+
+function findLand() {
+  for (let r = 0; r < 800; r += 8) for (let a = 0; a < 8; a++) {
+    const x = Math.round(Math.cos(a * Math.PI / 4) * r), z = Math.round(Math.sin(a * Math.PI / 4) * r);
+    if (heightAt(x, z) > WATER + 1) return { x, z };
+  }
+  return { x: 0, z: 0 };
+}
+
+// ---------- Starter skatepark (generated with the terrain, so it costs no save space) ----------
+function buildPark() {
+  const sp = findLand();
+  const L = Math.max(WATER + 2, Math.min(H - 16, heightAt(sp.x, sp.z) + 1));
+  const m = new Map(), S = (u, dy, v, id) => m.set((v * PS + u) * H + L + dy, id);
+  const row = (u0, u1, dy, v, id) => { for (let u = u0; u <= u1; u++) S(u, dy, v, id); };
+  // Mini halfpipe: two quarter pipes facing each other
+  row(2, 16, 0, 2, B.QP + 3); row(2, 16, 0, 10, B.QP + 1);
+  // Funbox with a rail on top
+  for (let v = 3; v <= 9; v++) { S(20, 0, v, B.RAMP); row(21, 25, 0, v, B.CONCRETE); S(26, 0, v, B.RAMP + 2); }
+  row(21, 25, 1, 6, B.RAIL_X);
+  // Stair set: bank up to a 3-high deck, then two drops
+  for (let v = 3; v <= 9; v++) {
+    S(29, 0, v, B.RAMP); S(30, 0, v, B.CONCRETE); S(30, 1, v, B.RAMP);
+    S(31, 0, v, B.CONCRETE); S(31, 1, v, B.CONCRETE); S(31, 2, v, B.RAMP);
+    for (let dy = 0; dy <= 2; dy++) row(32, 35, dy, v, B.CONCRETE);
+    row(36, 37, 0, v, B.CONCRETE); row(36, 37, 1, v, B.CONCRETE);
+    row(38, 39, 0, v, B.CONCRETE);
+  }
+  // Street section: ledge, flat rail, long rail, manual pad
+  row(3, 18, 0, 15, B.CONCRETE);
+  row(3, 18, 0, 19, B.RAIL_X);
+  for (let v = 14; v <= 32; v++) S(24, 0, v, B.RAIL_Z);
+  for (let v = 15; v <= 17; v++) row(28, 34, 0, v, B.CONCRETE);
+  // Kicker over a gap onto a landing ramp
+  row(42, 45, 0, 15, B.RAMP + 1); row(42, 45, 0, 20, B.RAMP + 3);
+  // Quarter pipe facing a tall bank with a deck
+  row(30, 40, 0, 27, B.QP + 3);
+  row(30, 40, 0, 37, B.RAMP + 1);
+  row(30, 40, 0, 38, B.CONCRETE); row(30, 40, 1, 38, B.RAMP + 1);
+  row(30, 40, 0, 39, B.CONCRETE); row(30, 40, 1, 39, B.CONCRETE); row(30, 40, 2, 39, B.RAMP + 1);
+  for (let v = 40; v <= 41; v++) for (let dy = 0; dy <= 2; dy++) row(30, 40, dy, v, B.CONCRETE);
+  park = { x0: sp.x - 24, z0: sp.z - 24, L, m };
+}
+
+// ---------- Terrain generation ----------
+const IDX = (x, y, z) => x + z * CS + y * CS * CS;
+function genChunk(cx, cz) {
+  const data = new Uint8Array(CS * CS * H), hs = new Int16Array(CS * CS);
+  for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+    const wx = cx * CS + x, wz = cz * CS + z, h = heightAt(wx, wz);
+    hs[x + z * CS] = h;
+    const beach = h <= WATER + 1, snowy = h >= 43 + Math.floor(hash(wx, wz) * 3);
+    for (let y = 0; y <= Math.max(h, WATER); y++) {
+      let id;
+      if (y === 0 || (y === 1 && hash(wx + y, wz) < .5)) id = B.BEDROCK;
+      else if (y > h) id = B.WATER;
+      else if (y < h - 3) id = B.STONE;
+      else if (beach) id = B.SAND;
+      else if (y === h) id = snowy ? B.SNOW : B.GRASS;
+      else id = B.DIRT;
+      data[IDX(x, y, z)] = id;
+    }
+  }
+  for (let z = 2; z < CS - 2; z++) for (let x = 2; x < CS - 2; x++) {
+    const wx = cx * CS + x, wz = cz * CS + z, h = hs[x + z * CS];
+    if (data[IDX(x, h, z)] !== B.GRASS || hash(wx, wz) > 0.014) continue;
+    const th = 4 + Math.floor(hash(wz, wx) * 3), top = h + th;
+    for (let y = 1; y <= th; y++) data[IDX(x, h + y, z)] = B.LOG;
+    for (let dy = -2; dy <= 1; dy++) {
+      const rad = dy <= -1 ? 2 : 1;
+      for (let dz = -rad; dz <= rad; dz++) for (let dx = -rad; dx <= rad; dx++) {
+        if (Math.abs(dx) === rad && Math.abs(dz) === rad && (dy === 1 || hash(wx + dx * 7 + dy, wz + dz * 13) < .5)) continue;
+        const yy = top + dy;
+        if (yy >= H) continue;
+        const i = IDX(x + dx, yy, z + dz);
+        if (data[i] === B.AIR) data[i] = B.LEAVES;
+      }
+    }
+  }
+  // Carve the skatepark into the terrain
+  if (park) for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+    const u = cx * CS + x - park.x0, v = cz * CS + z - park.z0;
+    if (u < 0 || u >= PS || v < 0 || v >= PS) continue;
+    for (let y = 1; y < park.L - 1; y++) { const i = IDX(x, y, z); if (data[i] === B.AIR || data[i] === B.WATER) data[i] = B.STONE; }
+    data[IDX(x, park.L - 1, z)] = B.CONCRETE;
+    const base = (v * PS + u) * H;
+    for (let y = park.L; y < H; y++) data[IDX(x, y, z)] = park.m.get(base + y) || B.AIR;
+  }
+  const e = edits[key(cx, cz)];
+  if (e) for (const k in e) data[+k] = e[k];
+  return data;
+}
+
+function getChunk(cx, cz) {
+  const k = key(cx, cz);
+  let c = chunks.get(k);
+  if (!c) { c = { cx, cz, data: genChunk(cx, cz), mesh: null, water: null, special: null, built: false, dirty: true }; chunks.set(k, c); }
+  return c;
+}
+function getBlock(x, y, z) {
+  if (y < 0) return B.BEDROCK;
+  if (y >= H) return B.AIR;
+  return getChunk(x >> 4, z >> 4).data[(x & 15) + (z & 15) * CS + y * CS * CS];
+}
+function setBlock(x, y, z, id) {
+  if (y < 0 || y >= H) return;
+  const cx = x >> 4, cz = z >> 4, lx = x & 15, lz = z & 15, c = getChunk(cx, cz), i = IDX(lx, y, lz), k = key(cx, cz);
+  c.data[i] = id;
+  (edits[k] || (edits[k] = {}))[i] = id;
+  const toBuild = new Set([c]);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    const n = chunks.get(key((x + dx) >> 4, (z + dz) >> 4));
+    if (n && n.built) toBuild.add(n);
+  }
+  toBuild.forEach(buildMesh);
+  scheduleSave();
+}
+
+// ---------- Meshing ----------
+const FACES = [
+  { dir: [-1, 0, 0], shade: .8, corners: [{ pos: [0, 1, 0], uv: [0, 1] }, { pos: [0, 0, 0], uv: [0, 0] }, { pos: [0, 1, 1], uv: [1, 1] }, { pos: [0, 0, 1], uv: [1, 0] }] },
+  { dir: [1, 0, 0], shade: .8, corners: [{ pos: [1, 1, 1], uv: [0, 1] }, { pos: [1, 0, 1], uv: [0, 0] }, { pos: [1, 1, 0], uv: [1, 1] }, { pos: [1, 0, 0], uv: [1, 0] }] },
+  { dir: [0, -1, 0], shade: .55, corners: [{ pos: [1, 0, 1], uv: [1, 0] }, { pos: [0, 0, 1], uv: [0, 0] }, { pos: [1, 0, 0], uv: [1, 1] }, { pos: [0, 0, 0], uv: [0, 1] }] },
+  { dir: [0, 1, 0], shade: 1, corners: [{ pos: [0, 1, 1], uv: [1, 1] }, { pos: [1, 1, 1], uv: [0, 1] }, { pos: [0, 1, 0], uv: [1, 0] }, { pos: [1, 1, 0], uv: [0, 0] }] },
+  { dir: [0, 0, -1], shade: .7, corners: [{ pos: [1, 0, 0], uv: [0, 0] }, { pos: [0, 0, 0], uv: [1, 0] }, { pos: [1, 1, 0], uv: [0, 1] }, { pos: [0, 1, 0], uv: [1, 1] }] },
+  { dir: [0, 0, 1], shade: .7, corners: [{ pos: [0, 0, 1], uv: [0, 0] }, { pos: [1, 0, 1], uv: [1, 0] }, { pos: [0, 1, 1], uv: [0, 1] }, { pos: [1, 1, 1], uv: [1, 1] }] },
+];
+for (const F of FACES) {
+  const na = F.dir.findIndex(v => v !== 0), ax = [0, 1, 2].filter(a => a !== na);
+  F.ao = F.corners.map(cn => {
+    const s1 = cn.pos[ax[0]] ? 1 : -1, s2 = cn.pos[ax[1]] ? 1 : -1;
+    const o1 = [...F.dir], o2 = [...F.dir], o3 = [...F.dir];
+    o1[ax[0]] += s1; o2[ax[1]] += s2; o3[ax[0]] += s1; o3[ax[1]] += s2;
+    return [o1, o2, o3];
+  });
+}
+const AO = [.45, .64, .82, 1], E = 0.01;
+const tileU = (tile, u) => ((tile % AW) + E + u * (1 - 2 * E)) / AW;
+const tileV = (tile, v) => 1 - (Math.floor(tile / AW) + 1 - (E + v * (1 - 2 * E))) / AH;
+
+function emitPoly(T, pts, uvs, tile, s) {
+  const base = T.P.length / 3;
+  for (let i = 0; i < pts.length; i++) {
+    T.P.push(pts[i][0], pts[i][1], pts[i][2]);
+    T.U.push(tileU(tile, uvs[i][0]), tileV(tile, uvs[i][1]));
+    T.C.push(s, s, s);
+  }
+  for (let i = 1; i < pts.length - 1; i++) T.I.push(base, base + i, base + i + 1);
+}
+function emitBox(T, x0, y0, z0, x1, y1, z1, tile) {
+  emitPoly(T, [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], [[0, 0], [1, 0], [1, 1], [0, 1]], tile, 1);
+  emitPoly(T, [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [[0, 0], [1, 0], [1, 1], [0, 1]], tile, .55);
+  emitPoly(T, [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]], [[0, 0], [1, 0], [1, 1], [0, 1]], tile, .7);
+  emitPoly(T, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [[0, 0], [1, 0], [1, 1], [0, 1]], tile, .7);
+  emitPoly(T, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [[0, 0], [1, 0], [1, 1], [0, 1]], tile, .8);
+  emitPoly(T, [[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]], [[0, 0], [1, 0], [1, 1], [0, 1]], tile, .8);
+}
+const QP_TS = Array.from({ length: 13 }, (_, i) => 1 - (1 - i / 12) ** 2);
+function emitSlope(T, id, bx, by, bz) {
+  const o = (id - 15) % 4, q = isQP(id), side = TILES[id][0], top = TILES[id][1];
+  // Build in canonical orientation (rising toward +x), then rotate about the block centre
+  const P = (x, y, z) => {
+    const r = o === 0 ? [x, z] : o === 1 ? [1 - z, x] : o === 2 ? [1 - x, 1 - z] : [z, 1 - x];
+    return [bx + r[0], by + y, bz + r[1]];
+  };
+  const ts = q ? QP_TS : [0, 1], hs = ts.map(t => q ? qp(t) : t);
+  for (let i = 0; i < ts.length - 1; i++) {
+    const t0 = ts[i], t1 = ts[i + 1], h0 = hs[i], h1 = hs[i + 1];
+    const steep = Math.atan2(h1 - h0, t1 - t0) / (Math.PI / 2);
+    emitPoly(T, [P(t0, h0, 0), P(t0, h0, 1), P(t1, h1, 1), P(t1, h1, 0)], [[0, t0], [1, t0], [1, t1], [0, t1]], top, 0.98 - steep * 0.25);
+    emitPoly(T, [P(t0, 0, 0), P(t1, 0, 0), P(t1, h1, 0), P(t0, h0, 0)], [[t0, 0], [t1, 0], [t1, h1], [t0, h0]], side, .75);
+    emitPoly(T, [P(t0, 0, 1), P(t1, 0, 1), P(t1, h1, 1), P(t0, h0, 1)], [[t0, 0], [t1, 0], [t1, h1], [t0, h0]], side, .75);
+  }
+  emitPoly(T, [P(1, 0, 0), P(1, 1, 0), P(1, 1, 1), P(1, 0, 1)], [[0, 0], [0, 1], [1, 1], [1, 0]], side, .7);
+  emitPoly(T, [P(0, 0, 0), P(1, 0, 0), P(1, 0, 1), P(0, 0, 1)], [[0, 0], [1, 0], [1, 1], [0, 1]], side, .55);
+}
+const RAIL_TOP = 0.62;
+function emitRail(T, id, bx, by, bz, get) {
+  const alongX = id === B.RAIL_X, tile = 17;
+  if (alongX) emitBox(T, bx, by + 0.5, bz + 0.44, bx + 1, by + RAIL_TOP, bz + 0.56, tile);
+  else emitBox(T, bx + 0.44, by + 0.5, bz, bx + 0.56, by + RAIL_TOP, bz + 1, tile);
+  const prev = alongX ? get(bx - 1, by, bz) : get(bx, by, bz - 1), next = alongX ? get(bx + 1, by, bz) : get(bx, by, bz + 1);
+  if (prev !== id || next !== id || (alongX ? bx : bz) % 3 === 0)
+    emitBox(T, bx + 0.45, by, bz + 0.45, bx + 0.55, by + 0.5, bz + 0.55, tile);
+}
+
+function makeGeo(T) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(T.P, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(T.U, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(T.C, 3));
+  g.setIndex(T.I);
+  g.computeBoundingSphere();
+  return g;
+}
+function disposeMeshes(c) {
+  for (const m of ['mesh', 'water', 'special']) if (c[m]) { scene.remove(c[m]); c[m].geometry.dispose(); c[m] = null; }
+}
+
+function buildMesh(c) {
+  const S = { P: [], U: [], C: [], I: [] }, W = { P: [], U: [], C: [], I: [] }, X = { P: [], U: [], C: [], I: [] };
+  const ox = c.cx * CS, oz = c.cz * CS, d = c.data;
+  const get = (x, y, z) => {
+    if (y < 0) return B.BEDROCK;
+    if (y >= H) return B.AIR;
+    if (x >= 0 && x < CS && z >= 0 && z < CS) return d[x + z * CS + y * CS * CS];
+    return getBlock(ox + x, y, oz + z);
+  };
+  const aos = [0, 0, 0, 0];
+  for (let y = 0; y < H; y++) for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+    const id = d[x + z * CS + y * CS * CS];
+    if (!id) continue;
+    if (isSlope(id)) { emitSlope(X, id, x, y, z); continue; }
+    if (isRail(id)) { emitRail(X, id, x, y, z, get); continue; }
+    const water = id === B.WATER;
+    for (let f = 0; f < 6; f++) {
+      const F = FACES[f], n = get(x + F.dir[0], y + F.dir[1], z + F.dir[2]);
+      if (isOpaque(n)) continue;
+      if (water ? n === B.WATER : (n === id && id === B.GLASS)) continue;
+      const tile = TILES[id][f === 3 ? 1 : f === 2 ? 2 : 0];
+      const T = water ? W : S, base = T.P.length / 3;
+      const lowerTop = water && get(x, y + 1, z) !== B.WATER;
+      for (let ci = 0; ci < 4; ci++) {
+        const cn = F.corners[ci];
+        let ao = 3;
+        if (!water) {
+          const [o1, o2, o3] = F.ao[ci];
+          const a = isOpaque(get(x + o1[0], y + o1[1], z + o1[2])) ? 1 : 0;
+          const b = isOpaque(get(x + o2[0], y + o2[1], z + o2[2])) ? 1 : 0;
+          const cc = isOpaque(get(x + o3[0], y + o3[1], z + o3[2])) ? 1 : 0;
+          ao = a && b ? 0 : 3 - (a + b + cc);
+        }
+        aos[ci] = ao;
+        const s = F.shade * AO[ao];
+        T.P.push(x + cn.pos[0], y + cn.pos[1] - (lowerTop && cn.pos[1] === 1 ? 0.12 : 0), z + cn.pos[2]);
+        T.U.push(tileU(tile, cn.uv[0]), tileV(tile, cn.uv[1]));
+        T.C.push(s, s, s);
+      }
+      if (aos[0] + aos[3] > aos[1] + aos[2]) T.I.push(base, base + 1, base + 3, base, base + 3, base + 2);
+      else T.I.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+    }
+  }
+  disposeMeshes(c);
+  const add = (T, mat, name) => {
+    if (!T.I.length) return;
+    c[name] = new THREE.Mesh(makeGeo(T), mat);
+    c[name].position.set(ox, 0, oz);
+    scene.add(c[name]);
+  };
+  add(S, matSolid, 'mesh'); add(X, matSpecial, 'special'); add(W, matWater, 'water');
+  c.built = true; c.dirty = false;
+}
+
+// ---------- Three.js setup ----------
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const FOG_NEAR = RENDER * CS * 0.55, FOG_FAR = RENDER * CS * 0.95;
+scene.fog = new THREE.Fog(0x87bfff, FOG_NEAR, FOG_FAR);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 1000);
+camera.rotation.order = 'YXZ';
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+const hemi = new THREE.HemisphereLight(0xffffff, 0x777777, 0.8), sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+sunLight.position.set(0.5, 1, 0.3);
+scene.add(hemi, sunLight);
+
+const highlight = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004)),
+  new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 })
+);
+highlight.visible = false;
+scene.add(highlight);
+const sun = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: 0xfff1a0, fog: false }));
+const moon = new THREE.Mesh(new THREE.PlaneGeometry(24, 24), new THREE.MeshBasicMaterial({ color: 0xe6ecff, fog: false }));
+scene.add(sun, moon);
+
+// ---------- Skater model (blocky rider on a board) ----------
+const mats = {};
+function box(w, h, d, color, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats[color] || (mats[color] = new THREE.MeshLambertMaterial({ color })));
+  m.position.set(x, y, z);
+  return m;
+}
+const skater = new THREE.Group();
+scene.add(skater);
+const boardPivot = new THREE.Group(); boardPivot.position.y = 0.1; skater.add(boardPivot);
+const boardFlip = new THREE.Group(); boardPivot.add(boardFlip);
+boardFlip.add(box(0.24, 0.03, 0.62, 0x1d1d1d, 0, 0.005, 0));
+boardFlip.add(box(0.24, 0.015, 0.62, 0xd0352b, 0, -0.018, 0));
+for (const s of [-1, 1]) {
+  const kick = box(0.24, 0.035, 0.15, 0xd0352b, 0, 0.025, s * 0.375);
+  kick.rotation.x = -s * 0.35;
+  boardFlip.add(kick);
+  boardFlip.add(box(0.2, 0.035, 0.06, 0xaaaaaa, 0, -0.045, s * 0.24));
+  for (const w of [-1, 1]) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.045, 10), mats.wheel || (mats.wheel = new THREE.MeshLambertMaterial({ color: 0xf4f0e0 })));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(w * 0.11, -0.065, s * 0.24);
+    boardFlip.add(wheel);
+  }
+}
+const rider = new THREE.Group(); rider.rotation.order = 'YXZ'; rider.position.y = 0.12; skater.add(rider);
+const SKIN = 0xd7a27a, SHIRT = 0x2d8bd6, PANTS = 0x2c3e75, SHOE = 0x222222, HAIR = 0x4b2e18;
+const SEG = 0.3375;
+const hips = new THREE.Group(); rider.add(hips);
+const legs = [];
+for (const s of [1, -1]) { // +1 = front leg (toward the nose), -1 = back leg
+  const root = new THREE.Group(); root.position.x = s * 0.1125; root.rotation.z = s * 0.18; hips.add(root);
+  const thigh = new THREE.Group(); root.add(thigh);
+  thigh.add(box(0.22, SEG, 0.22, PANTS, 0, -SEG / 2, 0));
+  const knee = new THREE.Group(); knee.position.y = -SEG; thigh.add(knee);
+  knee.add(box(0.22, SEG - 0.06, 0.22, PANTS, 0, -SEG / 2 + 0.03, 0));
+  knee.add(box(0.23, 0.07, 0.27, SHOE, 0, -SEG + 0.035, 0.02));
+  legs.push({ root, thigh, knee, s });
+}
+const torso = new THREE.Group(); hips.add(torso);
+torso.add(box(0.45, 0.675, 0.225, SHIRT, 0, 0.3375, 0));
+const head = new THREE.Group(); head.position.y = 0.675; torso.add(head);
+head.add(box(0.45, 0.45, 0.45, SKIN, 0, 0.225, 0));
+head.add(box(0.47, 0.12, 0.47, HAIR, 0, 0.42, 0));
+head.add(box(0.47, 0.3, 0.1, HAIR, 0, 0.3, -0.19));
+for (const s of [-1, 1]) {
+  head.add(box(0.1, 0.06, 0.02, 0xffffff, s * 0.1, 0.22, 0.226));
+  head.add(box(0.05, 0.06, 0.02, 0x3355aa, s * 0.075, 0.22, 0.232));
+}
+head.rotation.y = 1.0;
+const arms = [];
+for (const s of [1, -1]) {
+  const sh = new THREE.Group(); sh.position.set(s * 0.3375, 0.62, 0); torso.add(sh);
+  sh.add(box(0.2, 0.62, 0.2, SHIRT, 0, -0.2, 0));
+  sh.add(box(0.2, 0.12, 0.2, SKIN, 0, -0.56, 0));
+  arms.push({ sh, s });
+}
+rider.rotation.y = Math.PI / 2;
+skater.visible = false;
+
+// ---------- Walking player ----------
+const PW = 0.3, PH = 1.8, EYE = 1.62;
+const player = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, onGround: false, fly: false };
+let skating = true;
+
+function collides(p) {
+  const x0 = Math.floor(p.x - PW), x1 = Math.floor(p.x + PW), y0 = Math.floor(p.y), y1 = Math.floor(p.y + PH);
+  const z0 = Math.floor(p.z - PW), z1 = Math.floor(p.z + PW);
+  for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++)
+    if (isSolid(getBlock(x, y, z))) return true;
+  return false;
+}
+function moveAxis(axis, amt) {
+  if (!amt) return;
+  const p = player.pos;
+  p[axis] += amt;
+  if (!collides(p)) return;
+  if (axis === 'y') {
+    if (amt < 0) { p.y = Math.floor(p.y) + 1; player.onGround = true; }
+    else p.y = Math.floor(p.y + PH) - PH - 0.001;
+  } else p[axis] = amt > 0 ? Math.floor(p[axis] + PW) - PW - 0.001 : Math.floor(p[axis] - PW) + 1 + PW + 0.001;
+  player.vel[axis] = 0;
+}
+
+const keys = {};
+function walkPhysics(dt) {
+  const p = player, v = p.vel, k = keys;
+  const shift = k.ShiftLeft || k.ShiftRight;
+  const fx = Math.floor(p.pos.x), fz = Math.floor(p.pos.z);
+  const inWater = getBlock(fx, Math.floor(p.pos.y + 0.4), fz) === B.WATER || getBlock(fx, Math.floor(p.pos.y + EYE), fz) === B.WATER;
+  const ix = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0), iz = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0);
+  const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
+  let wx = ix * cos - iz * sin, wz = -ix * sin - iz * cos;
+  const len = Math.hypot(wx, wz);
+  if (len > 0) { wx /= len; wz /= len; }
+  const speed = p.fly ? 12 : inWater ? 2.6 : shift ? 5.8 : 4.3;
+  const t = Math.min(1, (p.onGround || p.fly || inWater ? 14 : 3.5) * dt);
+  v.x += (wx * speed - v.x) * t;
+  v.z += (wz * speed - v.z) * t;
+  if (p.fly) v.y += (((k.Space ? 1 : 0) - (shift ? 1 : 0)) * speed - v.y) * t;
+  else if (inWater) {
+    v.y -= 9 * dt; v.y *= 1 - Math.min(1, 2.5 * dt);
+    if (k.Space) v.y = Math.min(v.y + 28 * dt, 3.2);
+    v.y = Math.max(v.y, -4);
+  } else {
+    v.y = Math.max(v.y - 28 * dt, -50);
+    if (k.Space && p.onGround) v.y = 8.6;
+  }
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.z)) * dt / 0.4));
+  p.onGround = false;
+  for (let i = 0; i < steps; i++) { moveAxis('x', v.x * dt / steps); moveAxis('y', v.y * dt / steps); moveAxis('z', v.z * dt / steps); }
+}
+
+// ---------- Skate physics ----------
+const G = 18;
+const TRICKS = {
+  kickflip: { name: 'Kickflip', pts: 150, dur: 0.42 },
+  heelflip: { name: 'Heelflip', pts: 150, dur: 0.42 },
+  shuvit: { name: 'Pop Shove-it', pts: 120, dur: 0.36 },
+};
+const FRICTION = { [B.CONCRETE]: 0.25, [B.STONE]: 0.5, [B.COBBLE]: 1.1, [B.PLANKS]: 0.4, [B.BRICK]: 0.7, [B.GLASS]: 0.3, [B.BEDROCK]: 0.9,
+  [B.LOG]: 0.7, [B.GRASS]: 2.4, [B.DIRT]: 2.6, [B.SAND]: 4.5, [B.SNOW]: 1.8, [B.LEAVES]: 3 };
+const frictionOf = id => isSlope(id) ? 0.3 : (FRICTION[id] ?? 0.6);
+const fwdOf = yaw => ({ x: -Math.sin(yaw), z: -Math.cos(yaw) });
+
+const sk = {
+  pos: new THREE.Vector3(), vel: new THREE.Vector3(), lastSafe: new THREE.Vector3(),
+  s: 0, heading: 0, grad: 0, steer: 0, state: 'ground',
+  charging: false, charge: 0, pushT: 0, groundT: 0,
+  airTime: 0, popped: false, spin: 0, flip: null, airTricks: [], noGrindT: 0, fromQP: false,
+  grind: null, bal: 0, manual: false, manT: 0, mbal: 0, bailT: 0, bailReset: false,
+};
+
+// Height of the skateable surface under (x,z), scanning down from just above yHint
+function surfaceAt(x, z, yHint) {
+  const bx = Math.floor(x), bz = Math.floor(z);
+  for (let by = Math.floor(yHint + 0.6); by >= Math.floor(yHint) - 3; by--) {
+    const id = getBlock(bx, by, bz);
+    if (isSlope(id)) { const s = slopeInfo(id, x - bx, z - bz); return { h: by + s.h, id, gx: s.gx, gz: s.gz }; }
+    if (isSolid(id)) return { h: by + 1, id, gx: 0, gz: 0 };
+    if (id === B.WATER) return { h: by + 0.88, id, gx: 0, gz: 0 };
+  }
+  return { h: -Infinity, id: 0, gx: 0, gz: 0 };
+}
+
+function enterAir(popped) {
+  if (sk.manual) endManual(true);
+  sk.state = 'air'; sk.airTime = 0; sk.popped = popped; sk.spin = 0; sk.flip = null; sk.airTricks = [];
+  sk.noGrindT = popped ? 0.06 : 0.2; sk.fromQP = false; sk.groundT = 0;
+}
+
+function groundStep(dt, steer) {
+  const f = fwdOf(sk.heading);
+  const S0 = surfaceAt(sk.pos.x, sk.pos.z, sk.pos.y);
+  if (S0.id === B.WATER) return bail('Splash!', true);
+  if (S0.h < sk.pos.y - 0.3) { enterAir(false); sk.vel.set(f.x * sk.s, 0, f.z * sk.s); return; }
+  const grad = S0.gx * f.x + S0.gz * f.z, inv = 1 / Math.sqrt(1 + grad * grad), sinT = grad * inv;
+  sk.grad = grad;
+  sk.s -= G * sinT * dt;
+  const fr = frictionOf(S0.id) + (keys.KeyS && !sk.manual ? 6 : 0) + sk.s * sk.s * 0.003;
+  sk.s -= Math.sign(sk.s) * Math.min(Math.abs(sk.s), fr * dt);
+  sk.heading += steer * (2.6 / (1 + Math.abs(sk.s) * 0.07)) * dt;
+  const dist = sk.s * inv * dt;
+  const nx = sk.pos.x + f.x * dist, nz = sk.pos.z + f.z * dist;
+  const S1 = surfaceAt(nx, nz, sk.pos.y);
+  if (S1.h > sk.pos.y + 0.45) {
+    if (Math.abs(sk.s) > 7.5) return bail('Slammed into a wall');
+    sk.s = -sk.s * 0.3;
+    return;
+  }
+  if (S1.h < sk.pos.y + grad * dist - 0.2) {
+    // Ground falls away: launch along the surface tangent
+    const speed = sk.s;
+    enterAir(false);
+    if (isQP(S0.id) && speed * grad > 0 && Math.abs(grad) > 2) {
+      // Off the top of a quarter pipe: straight up, drifting back over the ramp
+      const r = RDIR[(S0.id - 15) % 4];
+      sk.vel.set(-r[0] * 0.35, Math.abs(speed), -r[1] * 0.35);
+      sk.fromQP = true;
+    } else {
+      sk.vel.set(f.x * speed * inv, speed * sinT, f.z * speed * inv);
+      sk.pos.x = nx; sk.pos.z = nz;
+    }
+    return;
+  }
+  sk.pos.set(nx, S1.h, nz);
+  if (S1.id === B.WATER) bail('Splash!', true);
+}
+
+function airTrickResult() {
+  const deg = Math.round(Math.abs(sk.spin) / Math.PI) * 180;
+  const spin = deg >= 180 ? (sk.spin > 0 ? 'FS ' : 'BS ') + deg : '';
+  let name = sk.airTricks.map(t => TRICKS[t].name).join(' + ');
+  let pts = sk.airTricks.reduce((a, t) => a + TRICKS[t].pts, 0);
+  if (spin) { name = name ? spin + ' ' + name : spin; pts += deg / 180 * 100; }
+  if (!name) {
+    if (sk.popped) { name = 'Ollie'; pts = 40; }
+    else if (sk.airTime > 0.45) { name = sk.fromQP ? 'Air' : 'Drop'; pts = 30; }
+    else return null;
+  }
+  return { name, pts: pts + sk.airTime * 80 };
+}
+
+function finishFlip() {
+  if (!sk.flip) return true;
+  if (sk.flip.t < sk.flip.dur * 0.75) return false;
+  sk.airTricks.push(sk.flip.type);
+  sk.flip = null;
+  return true;
+}
+
+function land(S) {
+  const f = fwdOf(sk.heading), v = sk.vel;
+  if (!finishFlip()) return bail('Didn\'t finish the flip');
+  const grad = S.gx * f.x + S.gz * f.z, norm = Math.sqrt(1 + grad * grad);
+  const vh = Math.hypot(v.x, v.z), steep = Math.hypot(S.gx, S.gz);
+  let sketchy = false;
+  if (vh > 2) {
+    const a = Math.acos(Math.min(1, Math.abs((f.x * v.x + f.z * v.z) / vh)));
+    if (a > 0.8) return bail('Landed sideways');
+    if (a > 0.4) sketchy = true;
+  }
+  if (steep > 1.5 && Math.abs(grad) < steep * 0.6) return bail('Landed sideways');
+  sk.s = (f.x * v.x + grad * v.y + f.z * v.z) / norm;
+  sk.pos.y = S.h;
+  sk.state = 'ground'; sk.groundT = 0; sk.grad = grad;
+  const t = airTrickResult();
+  if (t) addTrick(sk.s < -0.5 && t.name !== 'Drop' ? t.name + ' (fakie)' : t.name, t.pts);
+  if (sketchy) popup('Sketchy!', '', '#ffd23f');
+  if (keys.ShiftLeft || keys.ShiftRight) { sk.manual = true; sk.manT = 0; sk.mbal = 0; }
+}
+
+function findGrind(prevY) {
+  const px = sk.pos.x, pz = sk.pos.z, py = sk.pos.y;
+  if (Math.hypot(sk.vel.x, sk.vel.z) < 1) return null;
+  let best = null;
+  const bx0 = Math.floor(px), bz0 = Math.floor(pz);
+  for (let by = Math.floor(py) - 1; by <= Math.floor(prevY); by++)
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const bx = bx0 + dx, bz = bz0 + dz, id = getBlock(bx, by, bz), cands = [];
+      if (id === B.RAIL_X) cands.push({ axis: 'x', c: bz + 0.5, y: by + RAIL_TOP, kind: 'rail', by, fixed: bz, tol: 0.4, cell: bx });
+      else if (id === B.RAIL_Z) cands.push({ axis: 'z', c: bx + 0.5, y: by + RAIL_TOP, kind: 'rail', by, fixed: bx, tol: 0.4, cell: bz });
+      else if (isFullSolid(id) && !isSolid(getBlock(bx, by + 1, bz))) {
+        if (!isSolid(getBlock(bx + 1, by, bz))) cands.push({ axis: 'z', c: bx + 1, y: by + 1, kind: 'edge', by, solid: bx, open: bx + 1, tol: 0.28, cell: bz });
+        if (!isSolid(getBlock(bx - 1, by, bz))) cands.push({ axis: 'z', c: bx, y: by + 1, kind: 'edge', by, solid: bx, open: bx - 1, tol: 0.28, cell: bz });
+        if (!isSolid(getBlock(bx, by, bz + 1))) cands.push({ axis: 'x', c: bz + 1, y: by + 1, kind: 'edge', by, solid: bz, open: bz + 1, tol: 0.28, cell: bx });
+        if (!isSolid(getBlock(bx, by, bz - 1))) cands.push({ axis: 'x', c: bz, y: by + 1, kind: 'edge', by, solid: bz, open: bz - 1, tol: 0.28, cell: bx });
+      }
+      for (const g of cands) {
+        if (Math.floor(g.axis === 'x' ? px : pz) !== g.cell) continue;
+        const d = Math.abs((g.axis === 'x' ? pz : px) - g.c);
+        if (d > g.tol || !(prevY >= g.y - 0.05 && py <= g.y + 0.06)) continue;
+        if (!best || d < best.d) best = { ...g, d };
+      }
+    }
+  return best;
+}
+
+function grindValid(g) {
+  const a = Math.floor(sk.pos[g.axis]);
+  if (g.kind === 'rail') return getBlock(g.axis === 'x' ? a : g.fixed, g.by, g.axis === 'x' ? g.fixed : a) === (g.axis === 'x' ? B.RAIL_X : B.RAIL_Z);
+  const [sx, sz, ox, oz] = g.axis === 'x' ? [a, g.solid, a, g.open] : [g.solid, a, g.open, a];
+  return isFullSolid(getBlock(sx, g.by, sz)) && !isSolid(getBlock(sx, g.by + 1, sz)) && !isSolid(getBlock(ox, g.by, oz));
+}
+
+function startGrind(g) {
+  if (!finishFlip()) return bail('Didn\'t finish the flip');
+  const t = airTrickResult();
+  if (t && t.name !== 'Ollie' && t.name !== 'Drop') addTrick(t.name, t.pts);
+  const ax = g.axis === 'x' ? [1, 0] : [0, 1], f = fwdOf(sk.heading);
+  const va = sk.vel.x * ax[0] + sk.vel.z * ax[1], fa = f.x * ax[0] + f.z * ax[1];
+  const dir = va !== 0 ? Math.sign(va) : (fa >= 0 ? 1 : -1);
+  const angle = Math.acos(Math.min(1, Math.abs(fa)));
+  const shift = keys.ShiftLeft || keys.ShiftRight;
+  let name;
+  if (angle < 0.45) name = shift ? '5-0 Grind' : '50-50 Grind';
+  else if (angle < 1.1) name = g.kind === 'rail' ? 'Crooked Grind' : 'Smith Grind';
+  else name = g.kind === 'rail' ? 'Boardslide' : 'Noseslide';
+  sk.state = 'grind';
+  sk.grind = { ...g, dir, speed: Math.max(Math.abs(va), 2), name, t: 0, phase: Math.random() * 6 };
+  sk.bal = (Math.random() - 0.5) * 0.3;
+  if (g.axis === 'x') sk.pos.z = g.c; else sk.pos.x = g.c;
+  sk.pos.y = g.y;
+  sk.vel.set(0, 0, 0); sk.groundT = 0;
+}
+
+function endGrind() {
+  const g = sk.grind;
+  addTrick(g.name, 100 + g.t * 250);
+  enterAir(false);
+  sk.vel.set(g.axis === 'x' ? g.dir * g.speed : 0, 0.5, g.axis === 'z' ? g.dir * g.speed : 0);
+  sk.noGrindT = 0.25;
+  sk.grind = null;
+}
+
+function grindStep(dt, steer) {
+  const g = sk.grind;
+  g.t += dt;
+  g.speed -= 0.7 * dt;
+  if (g.speed < 0.6) return endGrind();
+  sk.pos[g.axis] += g.dir * g.speed * dt;
+  if (!grindValid(g)) return endGrind();
+  sk.bal += (sk.bal * 1.1 + Math.sin(g.t * 2.3 + g.phase) * 0.45) * dt - steer * 2.4 * dt;
+  if (Math.abs(sk.bal) >= 1) bail('Lost balance');
+}
+
+function airStep(dt, steer) {
+  sk.airTime += dt; sk.noGrindT -= dt;
+  sk.heading += steer * 6.5 * dt;
+  sk.spin += steer * 6.5 * dt;
+  if (sk.flip) { sk.flip.t += dt; if (sk.flip.t >= sk.flip.dur) finishFlip(); }
+  sk.vel.y -= G * dt;
+  const n = Math.max(1, Math.ceil(sk.vel.length() * dt / 0.15)), h = dt / n;
+  for (let i = 0; i < n; i++) {
+    const prevY = sk.pos.y, nx = sk.pos.x + sk.vel.x * h, nz = sk.pos.z + sk.vel.z * h;
+    if (surfaceAt(nx, nz, prevY).h > prevY + 0.5) { sk.vel.x = 0; sk.vel.z = 0; }
+    else { sk.pos.x = nx; sk.pos.z = nz; }
+    sk.pos.y += sk.vel.y * h;
+    if (sk.vel.y > 0 && isSolid(getBlock(Math.floor(sk.pos.x), Math.floor(sk.pos.y + 1.8), Math.floor(sk.pos.z)))) sk.vel.y = 0;
+    if (sk.vel.y <= 0 && sk.noGrindT <= 0) { const g = findGrind(prevY); if (g) return startGrind(g); }
+    const S = surfaceAt(sk.pos.x, sk.pos.z, prevY);
+    if (sk.pos.y <= S.h) {
+      sk.pos.y = S.h;
+      if (S.id === B.WATER) return bail('Splash!', true);
+      return land(S);
+    }
+  }
+}
+
+function bail(reason, reset) {
+  if (sk.state === 'bail') return;
+  const f = fwdOf(sk.heading);
+  if (sk.state === 'ground') sk.vel.set(f.x * sk.s, 0, f.z * sk.s);
+  else if (sk.state === 'grind') { const g = sk.grind; sk.vel.set(g.axis === 'x' ? g.dir * g.speed : 0, 0, g.axis === 'z' ? g.dir * g.speed : 0); }
+  sk.state = 'bail'; sk.bailT = 0; sk.bailReset = !!reset;
+  sk.manual = false; sk.flip = null; sk.charging = false; sk.charge = 0; sk.grind = null;
+  loseCombo('BAIL!', reason);
+}
+
+function bailStep(dt) {
+  sk.bailT += dt;
+  const damp = Math.max(0, 1 - 2.5 * dt);
+  sk.vel.x *= damp; sk.vel.z *= damp; sk.vel.y -= G * dt;
+  const nx = sk.pos.x + sk.vel.x * dt, nz = sk.pos.z + sk.vel.z * dt;
+  if (surfaceAt(nx, nz, sk.pos.y).h <= sk.pos.y + 0.45) { sk.pos.x = nx; sk.pos.z = nz; } else { sk.vel.x = sk.vel.z = 0; }
+  const prevY = sk.pos.y;
+  sk.pos.y += sk.vel.y * dt;
+  const S = surfaceAt(sk.pos.x, sk.pos.z, prevY);
+  if (sk.pos.y <= S.h) { sk.pos.y = S.h; sk.vel.y = 0; if (S.id === B.WATER) sk.bailReset = true; }
+  if (sk.bailT > 1.8) {
+    if (sk.bailReset) sk.pos.copy(sk.lastSafe);
+    sk.state = 'ground'; sk.s = 0; sk.vel.set(0, 0, 0); sk.groundT = 0;
+    const S2 = surfaceAt(sk.pos.x, sk.pos.z, sk.pos.y);
+    if (sk.pos.y > S2.h + 0.1) enterAir(false); else sk.pos.y = S2.h;
+  }
+}
+
+function endManual(ok) {
+  if (!sk.manual) return;
+  sk.manual = false;
+  if (ok && sk.manT > 0.3) addTrick('Manual', 50 + sk.manT * 150);
+}
+
+function pop(trick) {
+  const canPop = sk.state === 'ground' || sk.state === 'grind' || (sk.state === 'air' && !sk.popped && sk.airTime < 0.15 && !sk.fromQP);
+  if (canPop) {
+    const pv = 5.8 + 3.0 * Math.max(sk.charge, 0.5);
+    if (sk.state === 'ground') {
+      const f = fwdOf(sk.heading), inv = 1 / Math.sqrt(1 + sk.grad * sk.grad);
+      endManual(true);
+      enterAir(true);
+      sk.vel.set(f.x * sk.s * inv, sk.s * sk.grad * inv + pv, f.z * sk.s * inv);
+    } else if (sk.state === 'grind') {
+      const g = sk.grind;
+      addTrick(g.name, 100 + g.t * 250);
+      enterAir(true);
+      sk.vel.set(g.axis === 'x' ? g.dir * g.speed : 0, pv, g.axis === 'z' ? g.dir * g.speed : 0);
+      sk.grind = null;
+      sk.noGrindT = 0.2;
+    } else {
+      sk.popped = true;
+      sk.vel.y = Math.max(sk.vel.y, 0) + pv;
+    }
+    if (trick !== 'ollie') sk.flip = { type: trick, t: 0, dur: TRICKS[trick].dur };
+  } else if (sk.state === 'air' && !sk.flip && trick !== 'ollie') {
+    sk.flip = { type: trick, t: 0, dur: TRICKS[trick].dur };
+  }
+  sk.charging = false; sk.charge = 0;
+}
+
+function updateSkater(dt) {
+  const k = keys, steer = (k.KeyA ? 1 : 0) - (k.KeyD ? 1 : 0);
+  sk.steer = steer;
+  if (sk.charging) sk.charge = Math.min(1, sk.charge + dt * 2.2);
+  if (sk.state === 'ground') {
+    const shift = k.ShiftLeft || k.ShiftRight;
+    if (shift && Math.abs(sk.s) > 1.2 && !sk.manual) { sk.manual = true; sk.manT = 0; sk.mbal = (Math.random() - .5) * .2; }
+    if (sk.manual) {
+      if (!shift || Math.abs(sk.s) < 0.6) endManual(true);
+      else {
+        sk.manT += dt;
+        sk.mbal += (sk.mbal * 1.5 + Math.sin(sk.manT * 2.9) * 0.55) * dt + ((k.KeyS ? 1 : 0) - (k.KeyW ? 1 : 0)) * 2.4 * dt;
+        if (Math.abs(sk.mbal) >= 1) { sk.manual = false; loseCombo('Manual fail', 'Use W/S to balance'); }
+      }
+    }
+    sk.pushT -= dt;
+    if (k.KeyW && !sk.manual && !sk.charging && sk.pushT <= 0 && Math.abs(sk.s) < 10) {
+      sk.s += (sk.s < -0.5 ? -1 : 1) * 2.0;
+      sk.pushT = 0.6;
+    }
+    if (!sk.manual) { sk.groundT += dt; if (sk.groundT > 0.75) bank(); }
+    let rem = dt;
+    while (rem > 1e-6 && sk.state === 'ground') {
+      const h = Math.min(rem, 0.1 / Math.max(1, Math.abs(sk.s)));
+      groundStep(h, steer);
+      rem -= h;
+    }
+    if (sk.state === 'ground') sk.lastSafe.copy(sk.pos);
+    if (rem > 1e-6 && sk.state === 'air') airStep(rem, steer);
+  } else if (sk.state === 'air') airStep(dt, steer);
+  else if (sk.state === 'grind') grindStep(dt, steer);
+  else if (sk.state === 'bail') bailStep(dt);
+}
+
+// ---------- Combos & scoring ----------
+const combo = { names: [], pts: 0 };
+const comboEl = document.getElementById('combo'), popupEl = document.getElementById('popup'), scoreEl = document.getElementById('score');
+let popupTimer = 0;
+function popup(text, sub, color) {
+  popupEl.innerHTML = '';
+  popupEl.append(text);
+  if (sub) { const s = document.createElement('small'); s.textContent = sub; popupEl.append(s); }
+  popupEl.style.color = color || '#fff';
+  popupEl.style.opacity = 1;
+  clearTimeout(popupTimer);
+  popupTimer = setTimeout(() => popupEl.style.opacity = 0, 1300);
+}
+function drawCombo() {
+  if (!combo.names.length) { comboEl.innerHTML = ''; return; }
+  const names = combo.names.slice(-4).join(' + ');
+  comboEl.innerHTML = '';
+  const n = document.createElement('div'); n.textContent = (combo.names.length > 4 ? '… + ' : '') + names;
+  const p = document.createElement('div'); p.className = 'pts'; p.textContent = `${combo.pts.toLocaleString()} × ${combo.names.length}`;
+  comboEl.append(n, p);
+}
+function drawScore() {
+  scoreEl.innerHTML = '';
+  scoreEl.append(totalScore.toLocaleString());
+  const s = document.createElement('small'); s.textContent = `Best combo ${bestCombo.toLocaleString()}`;
+  scoreEl.append(s);
+}
+function addTrick(name, pts) {
+  combo.names.push(name);
+  combo.pts += Math.round(pts);
+  sk.groundT = 0;
+  drawCombo();
+}
+function bank() {
+  if (!combo.names.length) return;
+  const total = combo.pts * combo.names.length;
+  totalScore += total;
+  const best = total > bestCombo;
+  if (best) bestCombo = total;
+  popup('+' + total.toLocaleString(), best && combo.names.length > 1 ? 'New best combo!' : combo.names.length > 1 ? `${combo.names.length}-trick combo` : '', '#ffd23f');
+  combo.names = []; combo.pts = 0;
+  drawCombo(); drawScore(); scheduleSave();
+}
+function loseCombo(msg, sub) {
+  combo.names = []; combo.pts = 0;
+  drawCombo();
+  popup(msg, sub, '#ff5a4a');
+}
+
+// ---------- Building ----------
+function raycast(o, d, max, skipRails) {
+  let x = Math.floor(o.x), y = Math.floor(o.y), z = Math.floor(o.z);
+  const sx = Math.sign(d.x), sy = Math.sign(d.y), sz = Math.sign(d.z);
+  const tdx = sx ? Math.abs(1 / d.x) : Infinity, tdy = sy ? Math.abs(1 / d.y) : Infinity, tdz = sz ? Math.abs(1 / d.z) : Infinity;
+  let tmx = sx > 0 ? (x + 1 - o.x) * tdx : sx < 0 ? (o.x - x) * tdx : Infinity;
+  let tmy = sy > 0 ? (y + 1 - o.y) * tdy : sy < 0 ? (o.y - y) * tdy : Infinity;
+  let tmz = sz > 0 ? (z + 1 - o.z) * tdz : sz < 0 ? (o.z - z) * tdz : Infinity;
+  let nx = 0, ny = 0, nz = 0, t = 0;
+  while (t <= max) {
+    const id = getBlock(x, y, z);
+    if (id && id !== B.WATER && !(skipRails && isRail(id))) return { x, y, z, id, nx, ny, nz, t };
+    if (tmx < tmy && tmx < tmz) { x += sx; t = tmx; tmx += tdx; nx = -sx; ny = 0; nz = 0; }
+    else if (tmy < tmz) { y += sy; t = tmy; tmy += tdy; nx = 0; ny = -sy; nz = 0; }
+    else { z += sz; t = tmz; tmz += tdz; nx = 0; ny = 0; nz = -sz; }
+  }
+  return null;
+}
+
+let target = null;
+function breakBlock() {
+  if (!target || target.id === B.BEDROCK) return;
+  const { x, y, z } = target;
+  const wet = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]].some(([dx, dy, dz]) => getBlock(x + dx, y + dy, z + dz) === B.WATER);
+  setBlock(x, y, z, wet ? B.WATER : B.AIR);
+}
+function orientedId(base) {
+  const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw), alongX = Math.abs(fx) > Math.abs(fz);
+  const o = alongX ? (fx > 0 ? 0 : 2) : (fz > 0 ? 1 : 3);
+  if (base === B.RAMP || base === B.QP) return base + o;
+  if (base === B.RAIL_X) return alongX ? B.RAIL_X : B.RAIL_Z;
+  return base;
+}
+function placeBlock() {
+  if (!target) return;
+  const x = target.x + target.nx, y = target.y + target.ny, z = target.z + target.nz;
+  if (y < 0 || y >= H) return;
+  const cur = getBlock(x, y, z);
+  if (cur && cur !== B.WATER) return;
+  const id = orientedId(hotbar[sel]), p = player.pos;
+  if (isSolid(id) && x + 1 > p.x - PW && x < p.x + PW && y + 1 > p.y && y < p.y + PH && z + 1 > p.z - PW && z < p.z + PW) return;
+  setBlock(x, y, z, id);
+}
+const familyOf = id => isQP(id) ? B.QP : isSlope(id) ? B.RAMP : isRail(id) ? B.RAIL_X : id;
+function pickBlock() {
+  if (!target || target.id === B.BEDROCK) return;
+  const fam = familyOf(target.id), existing = hotbar.indexOf(fam);
+  if (existing >= 0) selectSlot(existing);
+  else { hotbar[sel] = fam; drawHotbar(); selectSlot(sel); }
+}
+
+// ---------- HUD ----------
+const hotbarEl = document.getElementById('hotbar'), nameEl = document.getElementById('blockname');
+const hintEl = document.getElementById('hint'), meterEl = document.getElementById('meter'), needleEl = document.getElementById('needle');
+const crosshairEl = document.getElementById('crosshair');
+let nameTimer = 0;
+function drawHotbar() {
+  hotbarEl.innerHTML = '';
+  hotbar.forEach((id, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'slot' + (i === sel ? ' sel' : '');
+    const c = document.createElement('canvas');
+    c.width = c.height = 16;
+    const tile = TILES[id][isSlope(id) ? 1 : 0];
+    c.getContext('2d').drawImage(atlas, (tile % AW) * 16, Math.floor(tile / AW) * 16, 16, 16, 0, 0, 16, 16);
+    const n = document.createElement('span');
+    n.textContent = i + 1;
+    slot.append(c, n);
+    hotbarEl.append(slot);
+  });
+}
+function selectSlot(i) {
+  sel = (i + 9) % 9;
+  [...hotbarEl.children].forEach((s, j) => s.classList.toggle('sel', j === sel));
+  nameEl.textContent = NAMES[hotbar[sel]];
+  nameEl.style.opacity = 1;
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(() => nameEl.style.opacity = 0, 1200);
+}
+function updateModeHud() {
+  crosshairEl.style.display = skating ? 'none' : 'block';
+  hintEl.textContent = skating
+    ? 'W push · A/D carve · Space or flick mouse to pop · Z/X/C flips · Shift manual · E walk & build'
+    : 'Click to break/place · 1–9 pick block · E hop on your board';
+}
+
+// ---------- Mode switching ----------
+let camSnap = true, camYaw = 0;
+function toSkate() {
+  skating = true;
+  sk.pos.copy(player.pos);
+  sk.heading = player.yaw; sk.s = 0; sk.vel.copy(player.vel); sk.manual = false; sk.grind = null;
+  const S = surfaceAt(sk.pos.x, sk.pos.z, sk.pos.y);
+  if (sk.pos.y - S.h < 0.15 && S.id !== B.WATER) { sk.state = 'ground'; sk.pos.y = S.h; } else enterAir(false);
+  sk.lastSafe.copy(sk.pos);
+  camYaw = sk.heading; camSnap = true;
+  updateModeHud();
+}
+function toWalk() {
+  if (sk.state === 'bail') return;
+  if (sk.state === 'grind') sk.grind = null;
+  skating = false;
+  player.pos.copy(sk.pos);
+  player.yaw = sk.heading; player.pitch = -0.15; player.vel.set(0, 0, 0);
+  while (collides(player.pos) && player.pos.y < H) player.pos.y = Math.floor(player.pos.y) + 1;
+  bank();
+  updateModeHud();
+}
+function spawnAtPark() {
+  sk.pos.set(park.x0 + 10.5, park.L, park.z0 + 24.5);
+  sk.heading = -Math.PI / 2; sk.s = 0; sk.vel.set(0, 0, 0); sk.state = 'ground'; sk.manual = false; sk.grind = null;
+  sk.lastSafe.copy(sk.pos);
+  player.pos.copy(sk.pos); player.yaw = sk.heading; player.pitch = 0;
+  skating = true; camYaw = sk.heading; camSnap = true;
+  updateModeHud();
+}
+
+// ---------- Input ----------
+const overlay = document.getElementById('overlay');
+let locked = false;
+const mouse = { l: false, r: false, timer: 0 };
+const flicks = [];
+let lastFlick = 0;
+function lock() { try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+document.getElementById('play').onclick = lock;
+document.getElementById('newworld').onclick = () => {
+  if (!confirm('Start a new world? Your current world and builds will be lost.')) return;
+  seed = Math.floor(Math.random() * 1e9);
+  edits = {};
+  initNoise(); buildPark();
+  chunks.forEach(disposeMeshes);
+  chunks.clear();
+  spawnAtPark();
+  saveNow();
+  lock();
+};
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === renderer.domElement;
+  overlay.style.display = locked ? 'none' : 'flex';
+  document.getElementById('play').textContent = 'Resume';
+  if (!locked) { mouse.l = mouse.r = false; sk.charging = false; for (const k in keys) keys[k] = false; saveNow(); }
+});
+
+function handleFlick(dx, dy) {
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  let trick = null;
+  if (dy < 0 && ay >= ax * 0.5) trick = dx < -ay * 0.45 ? 'kickflip' : dx > ay * 0.45 ? 'heelflip' : 'ollie';
+  else if (ax > ay * 2) trick = dx < 0 ? 'kickflip' : 'heelflip';
+  else if (dy > 0 && ax > dy * 0.35) trick = 'shuvit';
+  if (trick) pop(trick);
+}
+document.addEventListener('mousemove', e => {
+  if (!locked) return;
+  if (skating) {
+    const now = performance.now();
+    flicks.push({ t: now, dx: e.movementX, dy: e.movementY });
+    while (flicks.length && now - flicks[0].t > 120) flicks.shift();
+    let sx = 0, sy = 0;
+    for (const f of flicks) { sx += f.dx; sy += f.dy; }
+    if (now - lastFlick > 220 && Math.hypot(sx, sy) > 70) { lastFlick = now; flicks.length = 0; handleFlick(sx, sy); }
+    return;
+  }
+  player.yaw -= e.movementX * 0.0022;
+  player.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, player.pitch - e.movementY * 0.0022));
+});
+document.addEventListener('mousedown', e => {
+  if (!locked) return;
+  if (skating) {
+    if (e.button === 2 && (sk.state === 'ground' || sk.state === 'grind')) sk.charging = true;
+    return;
+  }
+  if (e.button === 0) { mouse.l = true; breakBlock(); }
+  else if (e.button === 2) { mouse.r = true; placeBlock(); }
+  else if (e.button === 1) { e.preventDefault(); pickBlock(); }
+  mouse.timer = 0.3;
+});
+document.addEventListener('mouseup', e => {
+  if (e.button === 0) mouse.l = false;
+  if (e.button === 2) { mouse.r = false; if (skating && sk.charging) pop('ollie'); }
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('wheel', e => { if (locked) selectSlot(sel + (e.deltaY > 0 ? 1 : -1)); }, { passive: true });
+document.addEventListener('keydown', e => {
+  if (!locked) return;
+  if (e.code === 'Space') e.preventDefault();
+  if (e.repeat) { keys[e.code] = true; return; }
+  keys[e.code] = true;
+  if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 9) selectSlot(n - 1); }
+  if (e.code === 'KeyE') { skating ? toWalk() : toSkate(); return; }
+  if (skating) {
+    if (e.code === 'Space' && (sk.state === 'ground' || sk.state === 'grind')) sk.charging = true;
+    if (e.code === 'KeyZ') pop('kickflip');
+    if (e.code === 'KeyX') pop('heelflip');
+    if (e.code === 'KeyC') pop('shuvit');
+  } else if (e.code === 'KeyF') { player.fly = !player.fly; player.vel.y = 0; }
+});
+document.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Space' && skating && sk.charging) pop('ollie');
+});
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+addEventListener('beforeunload', saveNow);
+setInterval(() => { if (locked) saveNow(); }, 5000);
+
+// ---------- Chunk streaming ----------
+function updateChunks() {
+  const pcx = Math.floor(player.pos.x / CS), pcz = Math.floor(player.pos.z / CS);
+  for (const [k, c] of chunks) {
+    const d = Math.max(Math.abs(c.cx - pcx), Math.abs(c.cz - pcz));
+    if (d > RENDER + 2 && c.built) { disposeMeshes(c); c.built = false; }
+    if (d > RENDER + 5) chunks.delete(k);
+  }
+  const todo = [];
+  for (let dz = -RENDER; dz <= RENDER; dz++) for (let dx = -RENDER; dx <= RENDER; dx++) {
+    const d2 = dx * dx + dz * dz;
+    if (d2 > RENDER * RENDER + 1) continue;
+    const c = getChunk(pcx + dx, pcz + dz);
+    if (!c.built || c.dirty) todo.push([d2, c]);
+  }
+  todo.sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < Math.min(2, todo.length); i++) buildMesh(todo[i][1]);
+}
+
+// ---------- Cameras & skater animation ----------
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+const camTarget = new THREE.Vector3(), camWant = new THREE.Vector3(), tmpV = new THREE.Vector3();
+function updateSkateCamera(dt) {
+  let travel = camYaw;
+  if (sk.state === 'ground' || sk.state === 'bail') { if (Math.abs(sk.s) > 0.5 || sk.state === 'bail') travel = sk.s >= -0.3 ? sk.heading : sk.heading + Math.PI; }
+  else if (sk.state === 'air') { if (Math.hypot(sk.vel.x, sk.vel.z) > 1.5) travel = Math.atan2(-sk.vel.x, -sk.vel.z); }
+  else if (sk.state === 'grind') { const g = sk.grind; travel = Math.atan2(-(g.axis === 'x' ? g.dir : 0), -(g.axis === 'z' ? g.dir : 0)); }
+  camYaw = camSnap ? travel : camYaw + wrapAngle(travel - camYaw) * Math.min(1, 3.5 * dt);
+  camTarget.set(sk.pos.x, sk.pos.y + 1.3, sk.pos.z);
+  camWant.set(Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(4.2).add(camTarget);
+  camWant.y += 1.1;
+  tmpV.subVectors(camWant, camTarget);
+  const len = tmpV.length();
+  tmpV.divideScalar(len);
+  const hit = raycast(camTarget, tmpV, len, true);
+  if (hit) camWant.copy(camTarget).addScaledVector(tmpV, Math.max(0.4, hit.t - 0.25));
+  if (camSnap) { camera.position.copy(camWant); camSnap = false; }
+  else camera.position.lerp(camWant, Math.min(1, 10 * dt));
+  camera.lookAt(camTarget.x, camTarget.y + 0.1, camTarget.z);
+}
+
+const vis = { crouch: 0, pitch: 0, roll: 0, arms: 0.2 };
+function updateSkaterVisual(dt) {
+  skater.visible = skating;
+  if (!skating) return;
+  const a = Math.min(1, dt * 12);
+  skater.position.copy(sk.pos);
+  const tPitch = sk.state === 'ground' ? Math.atan(sk.grad) : 0;
+  vis.pitch += (tPitch - vis.pitch) * Math.min(1, dt * (sk.state === 'ground' ? 20 : 3));
+  const lean = sk.state === 'ground' ? -sk.steer * 0.15 * Math.min(1, Math.abs(sk.s) / 6) : 0;
+  vis.roll += (lean - vis.roll) * a;
+  skater.rotation.set(vis.pitch, sk.heading, vis.roll, 'YXZ');
+
+  const crouchT = sk.charging ? 1 : sk.state === 'air' ? 0.7 : sk.state === 'grind' ? 0.45 : sk.manual ? 0.25 : 0.15;
+  vis.crouch += (crouchT - vis.crouch) * a;
+  const kb = vis.crouch * 0.95;
+  hips.position.y = 2 * SEG * Math.cos(kb) * 0.98;
+  for (const L of legs) { L.thigh.rotation.x = -kb; L.knee.rotation.x = 2 * kb; L.root.rotation.z = L.s * 0.18; }
+  torso.rotation.x = kb * 0.5;
+  torso.rotation.y = 0.25;
+  if (sk.state === 'ground' && sk.pushT > 0 && !sk.manual) {
+    const ph = 1 - sk.pushT / 0.6, back = legs[1];
+    back.root.rotation.z = -0.18 - Math.sin(ph * Math.PI) * 0.7;
+    back.thigh.rotation.x = 0;
+    back.knee.rotation.x = Math.sin(ph * Math.PI) * 0.3;
+  }
+  const armsT = sk.state === 'grind' ? 1.3 + sk.bal * 0.4 : sk.manual ? 1.0 : sk.state === 'air' ? 0.8 : 0.25;
+  vis.arms += (armsT - vis.arms) * a;
+  for (const A of arms) A.sh.rotation.z = A.s * vis.arms;
+
+  let rx = 0, rz = 0, ry = 0.12, bx = 0, by = 0.1, bz = 0, fz = 0, fy = 0;
+  if (sk.state === 'grind') rx = -sk.bal * 0.5;
+  if (sk.manual) { rz = sk.mbal * 0.35; bx = 0.28; by = 0.17; }
+  if (sk.flip) {
+    const p = Math.min(1, sk.flip.t / sk.flip.dur);
+    if (sk.flip.type === 'kickflip') fz = p * Math.PI * 2;
+    else if (sk.flip.type === 'heelflip') fz = -p * Math.PI * 2;
+    else fy = p * Math.PI;
+    by += Math.sin(p * Math.PI) * 0.25;
+  }
+  if (sk.state === 'bail') {
+    rx = -Math.min(1, sk.bailT * 2.5) * 1.45;
+    ry = 0.12 + Math.min(1, sk.bailT * 2.5) * 0.05;
+    bz = -Math.min(sk.bailT * 2.5, 2.2);
+    fy = sk.bailT * 6;
+    by = 0.1 + Math.max(0, Math.sin(Math.min(sk.bailT * 4, Math.PI))) * 0.3;
+  }
+  rider.rotation.x = rx; rider.rotation.z = rz; rider.position.y = ry;
+  boardPivot.rotation.x = bx; boardPivot.position.set(0, by, bz);
+  boardFlip.rotation.set(0, fy, fz);
+}
+
+// ---------- Day / night ----------
+let dayTime = 0.08;
+const DAY_LENGTH = 600;
+const skyDay = new THREE.Color(0x87bfff), skyNight = new THREE.Color(0x0b1030), skySet = new THREE.Color(0xf08a4b), skyWater = new THREE.Color(0x1d3a8a);
+const sky = new THREE.Color();
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function updateSky(underwater) {
+  const ang = dayTime * Math.PI * 2, sunH = Math.sin(ang);
+  const day = smooth(-0.15, 0.25, sunH);
+  sky.copy(skyNight).lerp(skyDay, day).lerp(skySet, Math.max(0, 1 - Math.abs(sunH) / 0.22) * 0.45);
+  const light = 0.22 + 0.78 * day;
+  matSolid.color.setScalar(light); matSpecial.color.setScalar(light); matWater.color.setScalar(light);
+  hemi.intensity = 0.85 * light; sunLight.intensity = 0.5 * light;
+  const dir = new THREE.Vector3(Math.cos(ang), sunH, 0.25).normalize();
+  sun.position.copy(camera.position).addScaledVector(dir, 350); sun.lookAt(camera.position);
+  moon.position.copy(camera.position).addScaledVector(dir, -350); moon.lookAt(camera.position);
+  if (underwater) {
+    scene.fog.color.copy(skyWater).multiplyScalar(light); scene.fog.near = 0.5; scene.fog.far = 20;
+  } else {
+    scene.fog.color.copy(sky); scene.fog.near = FOG_NEAR; scene.fog.far = FOG_FAR;
+  }
+  renderer.setClearColor(scene.fog.color);
+}
+
+// ---------- Boot ----------
+initNoise();
+buildPark();
+if (savedPlayer) {
+  player.pos.set(savedPlayer.x, savedPlayer.y, savedPlayer.z);
+  player.yaw = savedPlayer.yaw || 0; player.pitch = savedPlayer.pitch || 0; player.fly = !!savedPlayer.fly;
+  if (Array.isArray(savedPlayer.hotbar) && savedPlayer.hotbar.length === 9) savedPlayer.hotbar.forEach((id, i) => { if (TILES[id]) hotbar[i] = familyOf(id); });
+  sel = savedPlayer.sel | 0;
+  if (savedPlayer.skating === false) {
+    skating = false;
+    while (collides(player.pos) && player.pos.y < H) player.pos.y++;
+    updateModeHud();
+  } else toSkate();
+} else spawnAtPark();
+drawHotbar(); drawScore();
+{
+  const pcx = Math.floor(player.pos.x / CS), pcz = Math.floor(player.pos.z / CS);
+  for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) buildMesh(getChunk(pcx + dx, pcz + dz));
+}
+
+const infoEl = document.getElementById('info'), waterEl = document.getElementById('water');
+const fwd = new THREE.Vector3();
+let last = performance.now(), fpsAcc = 0, fpsFrames = 0, fps = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  if (locked) {
+    if (skating) { updateSkater(dt); player.pos.copy(sk.pos); }
+    else walkPhysics(dt);
+    dayTime = (dayTime + dt / DAY_LENGTH) % 1;
+    if (!skating && (mouse.l || mouse.r)) {
+      mouse.timer -= dt;
+      if (mouse.timer <= 0) { mouse.l ? breakBlock() : placeBlock(); mouse.timer = 0.22; }
+    }
+  }
+  updateChunks();
+
+  if (skating) {
+    updateSkateCamera(dt);
+    target = null;
+  } else {
+    camera.position.set(player.pos.x, player.pos.y + EYE, player.pos.z);
+    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+    camera.updateMatrixWorld();
+    fwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    target = raycast(camera.position, fwd, 6);
+  }
+  highlight.visible = !!target;
+  if (target) highlight.position.set(target.x + 0.5, target.y + 0.5, target.z + 0.5);
+  updateSkaterVisual(dt);
+
+  const bal = sk.state === 'grind' ? sk.bal : sk.manual ? sk.mbal : null;
+  meterEl.style.display = skating && bal !== null ? 'block' : 'none';
+  if (bal !== null) needleEl.style.left = (50 + Math.max(-1, Math.min(1, bal)) * 50) + '%';
+
+  const underwater = getBlock(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === B.WATER;
+  waterEl.style.display = underwater ? 'block' : 'none';
+  updateSky(underwater);
+  renderer.render(scene, camera);
+
+  fpsAcc += dt; fpsFrames++;
+  if (fpsAcc >= 0.5) {
+    fps = Math.round(fpsFrames / fpsAcc); fpsAcc = 0; fpsFrames = 0;
+    const p = player.pos, hours = Math.floor(((dayTime * 24) + 6) % 24);
+    const speed = skating ? (sk.state === 'grind' ? sk.grind.speed : sk.state === 'air' ? sk.vel.length() : Math.abs(sk.s)) : 0;
+    infoEl.textContent = `SkateCraft  ${fps} fps\nXYZ: ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\nTime: ${String(hours).padStart(2, '0')}:00` +
+      (skating ? `\nSpeed: ${(speed * 3.6).toFixed(0)} km/h${sk.s < -0.5 && sk.state === 'ground' ? ' (fakie)' : ''}` : player.fly ? '\nFlying (F to land)' : '');
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

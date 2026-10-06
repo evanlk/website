@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harbor City</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; }
+  canvas#game { display: block; width: 100vw; height: 100vh; }
+  .shadow { text-shadow: 0 2px 3px rgba(0,0,0,.85), 0 0 2px #000; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; visibility: hidden; }
+  body.playing #hud { visibility: visible; }
+  #topright { position: absolute; top: 18px; right: 24px; text-align: right; }
+  #money { font: 800 30px/1 "Arial Black", Impact, sans-serif; color: #7ee08a; letter-spacing: 1px; }
+  #clock { margin-top: 6px; font-weight: 700; font-size: 15px; opacity: .92; }
+  #minimapWrap { position: absolute; left: 22px; bottom: 22px; width: 210px; height: 210px; border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(0,0,0,.55), 0 0 0 5px rgba(255,255,255,.18), 0 6px 18px rgba(0,0,0,.6); overflow: hidden; }
+  #minimap { width: 210px; height: 210px; display: block; }
+  #zone { position: absolute; right: 26px; bottom: 26px; font: 800 26px/1.1 "Arial Black", Impact, sans-serif;
+    letter-spacing: 1px; text-transform: uppercase; opacity: 0; transition: opacity .6s; text-align: right; }
+  #zone small { display: block; font: 600 13px system-ui, sans-serif; letter-spacing: 3px; opacity: .8; }
+  #debug { position: absolute; left: 10px; top: 8px; font: 12px ui-monospace, Menlo, monospace; color: #cfe;
+    background: rgba(0,0,0,.35); padding: 4px 7px; border-radius: 4px; white-space: pre; display: none; }
+  #help { position: absolute; left: 14px; top: 40px; font-size: 13px; line-height: 1.55; background: rgba(0,0,0,.45);
+    padding: 10px 14px; border-radius: 8px; transition: opacity .6s; }
+  #help { display: grid; grid-template-columns: auto auto; gap: 1px 12px; }
+  #help b { color: #ffd36b; }
+  #toast { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); font-weight: 700; font-size: 17px;
+    background: rgba(0,0,0,.55); padding: 8px 18px; border-radius: 6px; opacity: 0; transition: opacity .4s; }
+  #zone.raised { bottom: 236px; }
+  #stars { margin-top: 6px; font-size: 26px; letter-spacing: 2px; color: rgba(255,255,255,.18); min-height: 30px; }
+  #stars b { color: #fff; font-weight: 400; }
+  #stars.flash b { animation: starflash .6s steps(2) infinite; }
+  @keyframes starflash { 50% { color: rgba(255,255,255,.25); } }
+  #weapon { margin-top: 4px; font: 700 15px system-ui; }
+  #weapon span { opacity: .75; font-weight: 600; margin-left: 8px; }
+  #bars { position: absolute; left: 22px; bottom: 6px; width: 210px; display: flex; gap: 4px; }
+  #bars .bar { flex: 1; height: 7px; background: rgba(0,0,0,.55); border-radius: 2px; overflow: hidden; }
+  #bars .bar i { display: block; height: 100%; width: 100%; background: #5fd35b; transition: width .2s; }
+  #bars .bar.armor i { background: #4aa8ff; }
+  #hurt { position: absolute; inset: 0; box-shadow: inset 0 0 160px 40px rgba(220,20,20,.75); opacity: 0; transition: opacity .25s; }
+  #bigtext { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font: 900 72px "Arial Black", Impact, sans-serif;
+    letter-spacing: 6px; color: #e8e8e8; text-shadow: 0 4px 0 #000, 0 0 30px rgba(0,0,0,.8); opacity: 0; transition: opacity .6s; }
+  #bigtext small { display: block; font: 700 18px system-ui; letter-spacing: 3px; margin-top: 10px; }
+  #prompt { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); font-weight: 600; font-size: 16px;
+    background: rgba(0,0,0,.5); padding: 7px 16px; border-radius: 6px; opacity: 0; transition: opacity .25s; }
+  #prompt b { display: inline-block; background: #ffd36b; color: #111; border-radius: 4px; padding: 0 7px; margin-right: 6px; }
+  #speedoWrap { position: absolute; right: 18px; bottom: 14px; width: 260px; text-align: center; display: none; }
+  #speedo { width: 260px; height: 190px; display: block; }
+  #speedoName { font: 800 15px system-ui; letter-spacing: 2px; text-transform: uppercase; margin-top: -4px; }
+  #speedoRadio { font: 600 13px system-ui; opacity: .85; margin-top: 2px; }
+  #objective { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); font: 700 17px system-ui; text-align: center;
+    background: rgba(0,0,0,.45); padding: 7px 16px; border-radius: 6px; max-width: 70vw; display: none; }
+  #mtimer { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); font: 800 26px "Arial Black", Impact, sans-serif; display: none; }
+  #hud.cine #topright, #hud.cine #minimapWrap, #hud.cine #bars, #hud.cine #zone, #hud.cine #speedoWrap, #hud.cine #prompt { opacity: 0 !important; }
+  #letterbox i { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height .5s; }
+  #letterbox i:first-child { top: 0; } #letterbox i:last-child { bottom: 0; }
+  #letterbox.on i { height: 11vh; }
+  #dialog { position: absolute; left: 50%; bottom: 13vh; transform: translateX(-50%); width: min(720px, 86vw); text-align: center; display: none;
+    font: 600 20px/1.4 system-ui; text-shadow: 0 2px 3px #000; }
+  #dialog b { display: block; color: #ffd36b; font: 800 15px system-ui; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px; }
+  #dialog small { display: block; margin-top: 8px; font-size: 12px; opacity: .55; }
+  #menu { position: fixed; right: 40px; top: 50%; transform: translateY(-50%); width: 360px; background: rgba(10,14,22,.92); border-radius: 10px;
+    padding: 18px 20px; z-index: 5; display: none; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  #menu h2 { margin: 0; font: 900 22px "Arial Black", Impact, sans-serif; letter-spacing: 1px; color: #ffd36b; }
+  #menu p { margin: 4px 0 12px; font-size: 13px; opacity: .7; }
+  #menu ul { list-style: none; margin: 0; padding: 0; }
+  #menu li { display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 5px; cursor: pointer; font-size: 15px; }
+  #menu li.sel { background: rgba(255,211,107,.18); outline: 1px solid rgba(255,211,107,.5); }
+  #menu li.dis { opacity: .4; cursor: default; }
+  #menu li b { font-weight: 700; color: #7ee08a; }
+  #menu .hint { margin-top: 12px; font-size: 12px; opacity: .55; text-align: center; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -10px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.85); box-shadow: 0 0 3px #000, inset 0 0 2px #000; display: none; }
+  #crosshair::after { content: ''; position: absolute; left: 6px; top: 6px; width: 4px; height: 4px; border-radius: 50%; background: #fff; }
+
+  /* ---------- Overlay / title ---------- */
+  #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(10,25,45,.55), rgba(0,0,0,.85)); z-index: 10; }
+  #overlay .panel { text-align: center; max-width: 560px; padding: 24px; }
+  #overlay h1 { font: 900 64px/1 "Arial Black", Impact, sans-serif; margin: 0; letter-spacing: 3px;
+    background: linear-gradient(180deg,#ffe28a,#ff9a3c); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 0 rgba(0,0,0,.6)); }
+  #overlay .sub { margin: 8px 0 26px; letter-spacing: 6px; font-size: 13px; opacity: .75; text-transform: uppercase; }
+  #overlay button { font: 800 18px system-ui, sans-serif; padding: 13px 34px; border: 0; border-radius: 40px;
+    background: #ffb347; color: #1b1b1b; cursor: pointer; letter-spacing: 1px; }
+  #overlay button:disabled { background: #555; color: #aaa; cursor: wait; }
+  #ovButtons { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #ovButtons button.alt { background: rgba(255,255,255,.12); color: #fff; font-weight: 700; padding: 10px 28px; min-width: 220px; }
+  #ovButtons button { min-width: 220px; }
+  #ovPage { display: none; position: absolute; inset: 0; overflow: auto; padding: 60px 24px; }
+  #ovPage .box { max-width: 640px; margin: 0 auto; background: rgba(10,14,22,.9); border-radius: 12px; padding: 22px 26px; }
+  #ovPage h2 { margin: 0 0 14px; font: 900 26px "Arial Black", Impact, sans-serif; color: #ffd36b; letter-spacing: 1px; }
+  #ovPage .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 15px; }
+  #ovPage .row select, #ovPage .row input[type=range] { width: 220px; }
+  #ovPage select { background: #1c2230; color: #fff; border: 1px solid #3a4458; border-radius: 6px; padding: 6px; font-size: 14px; }
+  #ovPage .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; font-size: 14px; }
+  #ovPage .keys b { color: #ffd36b; }
+  #ovPage .back { margin-top: 18px; text-align: center; }
+  #mapView { display: none; position: absolute; inset: 0; background: #12202c; }
+  #bigmap { width: 100%; height: 100%; display: block; cursor: grab; }
+  #mapHint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 13px; background: rgba(0,0,0,.55); padding: 6px 14px; border-radius: 6px; }
+  #mapLegend { position: absolute; right: 14px; top: 14px; font-size: 13px; line-height: 1.7; background: rgba(0,0,0,.55); padding: 10px 14px; border-radius: 8px; }
+  #mapLegend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; border: 1px solid #000; }
+  #feed { position: absolute; left: 14px; top: 38%; display: flex; flex-direction: column; gap: 6px; max-width: 320px; }
+  #feed div { background: rgba(0,0,0,.55); padding: 7px 12px; border-left: 3px solid #ffd36b; border-radius: 4px; font: 600 14px system-ui; transition: opacity .5s, transform .3s; }
+  #menu.phone { right: auto; left: 50%; transform: translate(-50%, -50%); width: 300px; border-radius: 26px; padding: 26px 18px; border: 3px solid #2a3142; }
+  #overlay .msg { margin-top: 16px; font-size: 14px; opacity: .8; min-height: 20px; }
+  #overlay .keys { margin-top: 22px; font-size: 13px; line-height: 1.7; opacity: .75; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.186.1/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="topright" class="shadow"><div id="money">$0</div><div id="clock">--:--</div><div id="stars"></div><div id="weapon"></div></div>
+  <div id="minimapWrap"><canvas id="minimap" width="420" height="420"></canvas></div>
+  <div id="bars"><div class="bar"><i id="hpBar"></i></div><div class="bar armor"><i id="arBar"></i></div></div>
+  <div id="hurt"></div>
+  <div id="bigtext"></div>
+  <div id="letterbox"><i></i><i></i></div>
+  <div id="objective" class="shadow"></div>
+  <div id="mtimer" class="shadow"></div>
+  <div id="dialog"><b id="dlgWho"></b><span id="dlgText"></span><small>Space / E to continue</small></div>
+  <div id="zone" class="shadow"></div>
+  <div id="debug"></div>
+  <div id="help">
+    <b>WASD</b><span>move</span><b>Shift</b><span>sprint</span>
+    <b>Space</b><span>jump / climb / vault</span><b>Mouse</b><span>look (wheel zooms)</span>
+    <b>F</b><span>enter / exit vehicle</span><b>W/S · A/D</b><span>drive · steer (Space: handbrake)</span>
+    <b>E · R/Q</b><span>horn · radio station</span>
+    <b>RMB · LMB</b><span>aim · shoot / punch</span><b>1–4 · R</b><span>weapons · reload</span>
+    <b>E</b><span>interact (missions, shops)</span>
+    <b>T / Y</b><span>+1 hour / cycle weather</span><b>F3 · H</b><span>debug · toggle help</span><b>Esc</b><span>pause</span>
+  </div>
+  <div id="toast" class="shadow"></div>
+  <div id="feed"></div>
+  <div id="prompt" class="shadow"></div>
+  <div id="speedoWrap"><canvas id="speedo" width="260" height="190"></canvas><div id="speedoName" class="shadow"></div><div id="speedoRadio" class="shadow"></div></div>
+  <div id="crosshair"></div>
+</div>
+
+<div id="menu"></div>
+<div id="overlay">
+  <div class="panel" id="ovPanel">
+    <h1>HARBOR CITY</h1>
+    <div class="sub" id="ovSub">An open-world sandbox</div>
+    <div id="ovButtons"></div>
+    <div class="msg" id="ovmsg">Generating city…</div>
+  </div>
+  <div id="ovPage"></div>
+  <div id="mapView"><canvas id="bigmap"></canvas><div id="mapHint">Drag to pan · wheel to zoom · click to set a waypoint · right-click to clear · Esc to go back</div><div id="mapLegend"></div></div>
+</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>
